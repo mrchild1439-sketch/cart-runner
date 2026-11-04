@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>エネルギー保存トロッコ</title>
+<style>
+  :root{
+    --bg:#14181f; --panel:#1e2530; --panel2:#262f3c; --ink:#ece9e1; --muted:#9aa3ad;
+    --obj:#f2b84b; --obj2:#6fb3ff; --arrow:#ff7a6b; --fill2:#2d3846;
+    --good:#4cd88a; --bad:#ff5a5a; --warn:#ffcc4d;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP","Yu Gothic",system-ui,sans-serif}
+  #app{max-width:720px;margin:0 auto;padding:12px 16px 24px;position:relative}
+  header{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  .stage{font-weight:800;letter-spacing:.06em;font-size:15px;white-space:nowrap}
+  .timer{flex:1;display:flex;align-items:center;gap:8px}
+  .bar{flex:1;height:12px;background:var(--panel2);border-radius:6px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:100%;background:var(--good);transition:width .1s linear,background .3s}
+  .sec{font-variant-numeric:tabular-nums;font-weight:800;font-size:20px;width:3.2em;text-align:right}
+  .sec.low{color:var(--bad);animation:pulse .5s infinite alternate}
+  @keyframes pulse{to{transform:scale(1.15)}}
+  #question{background:var(--panel);border-radius:14px;padding:12px;display:flex;gap:12px;align-items:center}
+  #diagram{flex:0 0 46%}
+  #diagram svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:10px}
+  #qtext{margin:0;font-size:16px;line-height:1.65}
+  #qtext .ask{display:block;margin-top:6px;color:var(--warn);font-weight:700;font-size:14px}
+  @media (max-width:560px){
+    #question{flex-direction:column;align-items:stretch}
+    #diagram{flex:none}
+    #qtext{font-size:15px}
+  }
+  #sceneWrap{position:relative;margin-top:10px;border-radius:14px;overflow:hidden}
+  #scene{display:block;width:100%;height:auto}
+  #banner{position:absolute;left:0;right:0;top:40%;text-align:center;font-size:34px;font-weight:900;
+    text-shadow:0 3px 0 #000a,0 0 20px #000;pointer-events:none;opacity:0;transition:opacity .2s}
+  #banner.show{opacity:1}
+  #choices{display:flex;gap:12px;margin-top:10px}
+  #choices button{flex:1;font:inherit;font-size:18px;font-weight:800;padding:14px 8px;border-radius:12px;border:0;
+    background:#7a4b22;color:#fff3dc;box-shadow:0 4px 0 #4a2c12;cursor:pointer}
+  #choices button:active{transform:translateY(3px);box-shadow:0 1px 0 #4a2c12}
+  #choices button:disabled{opacity:.45;cursor:default}
+  .hint{color:var(--muted);font-size:12px;text-align:center;margin-top:6px}
+  /* diagrams */
+  .dg .ln{stroke:var(--ink);stroke-width:2;fill:none;stroke-linejoin:round;stroke-linecap:round}
+  .dg .hl{stroke:var(--muted);stroke-width:1.2}
+  .dg .ds{stroke:var(--muted);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+  .dg .ob{fill:var(--obj);stroke:var(--ink);stroke-width:1.5}
+  .dg .ob2{fill:var(--obj2);stroke:var(--ink);stroke-width:1.5}
+  .dg .gh{fill:none;stroke:var(--muted);stroke-width:1.5;stroke-dasharray:3 3}
+  .dg .sl{fill:var(--fill2);stroke:var(--ink);stroke-width:2}
+  .dg .ar{stroke:var(--arrow);stroke-width:2.5;fill:none}
+  .dg .skid{stroke:#5b5b5b;stroke-width:4}
+  .dg text{fill:var(--ink);font-size:12px}
+  .dg text.em{fill:var(--arrow);font-weight:700;font-style:italic}
+  /* scene */
+  #view{display:block;width:100%;aspect-ratio:16/9;cursor:pointer;background:#000}
+  #mute{background:var(--panel2);border:0;border-radius:8px;font-size:16px;padding:4px 8px;cursor:pointer}
+  #banner.good{color:var(--good)} #banner.bad{color:var(--bad)}
+  .card.wide{max-width:720px}
+  .card .btn.sub{background:var(--panel2);color:var(--ink)}
+  .rv{background:var(--panel2);border-left:5px solid var(--good);border-radius:10px;padding:10px 12px;margin:12px 0}
+  .rv.ng{border-left-color:var(--bad)}
+  .rvh{display:flex;justify-content:space-between;font-weight:800;margin-bottom:6px}
+  .rvb{display:flex;gap:12px;align-items:flex-start}
+  .rvd{flex:0 0 38%}
+  .rvd svg{width:100%;height:auto;display:block;background:var(--bg);border-radius:8px}
+  .rvb p{margin:0 0 6px;font-size:14.5px}
+  .rv .exp{background:var(--panel);margin-top:8px}
+  .small{font-size:13.5px;color:var(--muted)}
+  .small b{color:var(--ink)}
+  .point{background:#2b3a2f;border-radius:10px;padding:10px 12px;margin-top:14px;font-size:14.5px}
+  @media (max-width:560px){.rvb{flex-direction:column}.rvd{flex:none;width:100%}}
+  /* overlay */
+  #overlay{position:fixed;inset:0;background:#000b;display:flex;align-items:center;justify-content:center;padding:16px;z-index:10}
+  #overlay[hidden]{display:none}
+  .card{background:var(--panel);border-radius:16px;padding:22px 20px;max-width:520px;width:100%;
+    box-shadow:0 10px 40px #000a;max-height:90vh;overflow:auto}
+  .card h1{margin:0 0 8px;font-size:26px}
+  .card h2{margin:0 0 8px;font-size:24px}
+  .card p{line-height:1.7;margin:8px 0}
+  .card .ans{font-weight:800;font-size:17px}
+  .card .exp{background:var(--panel2);border-radius:10px;padding:10px 12px;font-size:14.5px}
+  .card ul{padding-left:1.2em;line-height:1.8;margin:8px 0}
+  .card .btn{display:block;width:100%;margin-top:14px;font:inherit;font-size:18px;font-weight:800;padding:13px;border:0;
+    border-radius:12px;background:var(--good);color:#0d2a19;cursor:pointer}
+  .good{color:var(--good)} .bad{color:var(--bad)} .muted{color:var(--muted)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="stage" id="stage">STAGE 1/10</div>
+    <div class="timer"><div class="bar"><i id="bar"></i></div><div class="sec" id="sec">20.0</div></div>
+    <button id="mute" title="音のON/OFF">🔊</button>
+  </header>
+
+  <section id="question">
+    <div id="diagram"></div>
+    <p id="qtext"></p>
+  </section>
+
+  <div id="sceneWrap">
+    <canvas id="view" aria-label="トロッコからの一人称視点"></canvas>
+    <div id="banner"></div>
+  </div>
+
+  <div id="choices">
+    <button id="btnL">◀ <span></span></button>
+    <button id="btnR"><span></span> ▶</button>
+  </div>
+  <div class="hint">画面の左右タップ・キーボードの ← → でも選べます</div>
+</div>
+
+<div id="overlay"><div class="card" id="card"></div></div>
+
+<script>
+/* ========== 図のヘルパー ========== */
+const DEG = 180/Math.PI;
+function svg(inner){
+  return `<svg class="dg" viewBox="0 0 300 160" role="img"><defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#ff7a6b"/></marker></defs>${inner}</svg>`;
+}
+function ground(x1,x2,y,up=false){
+  let s=`<line class="ln" x1="${x1}" y1="${y}" x2="${x2}" y2="${y}"/>`;
+  for(let x=x1+6;x<=x2;x+=10) s+=`<line class="hl" x1="${x}" y1="${y}" x2="${x-6}" y2="${y+(up?-7:7)}"/>`;
+  return s;
+}
+function wallV(x,y1,y2){
+  let s=`<line class="ln" x1="${x}" y1="${y1}" x2="${x}" y2="${y2}"/>`;
+  for(let y=y1+4;y<=y2;y+=10) s+=`<line class="hl" x1="${x}" y1="${y}" x2="${x-7}" y2="${y+6}"/>`;
+  return s;
+}
+function zig(x1,y1,x2,y2,n=8,a=7){
+  const dx=x2-x1,dy=y2-y1,L=Math.hypot(dx,dy),ux=dx/L,uy=dy/L,nx=-uy,ny=ux,lead=L*.08;
+  const p=[[x1,y1],[x1+ux*lead,y1+uy*lead]];
+  for(let i=0;i<n;i++){const t=lead+(L-2*lead)*(i+.5)/n,s=(i%2?-1:1)*a;p.push([x1+ux*t+nx*s,y1+uy*t+ny*s]);}
+  p.push([x2-ux*lead,y2-uy*lead],[x2,y2]);
+  return `<polyline class="ln" points="${p.map(q=>q.map(v=>v.toFixed(1)).join(',')).join(' ')}"/>`;
+}
+function arr(x1,y1,x2,y2,both=false){
+  return `<line class="ar" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" marker-end="url(#ah)"${both?' marker-start="url(#ah)"':''}/>`;
+}
+function T(x,y,s,a='middle',cls=''){return `<text x="${x}" y="${y}" text-anchor="${a}"${cls?` class="${cls}"`:''}>${s}</text>`}
+// 斜面: (30,50)-(270,140)
+const SA=Math.atan2(90,240), DN=[Math.cos(SA),Math.sin(SA)], NU=[Math.sin(SA),-Math.cos(SA)];
+const sp=t=>[30+240*t,50+90*t];
+const slope=()=>`<polygon class="sl" points="30,140 270,140 30,50"/>`;
+const blockOn=t=>{const [x,y]=sp(t);return `<g transform="translate(${x},${y}) rotate(${SA*DEG})"><rect class="ob" x="-15" y="-20" width="30" height="20" rx="2"/></g>`};
+const off=(p,v,k)=>[p[0]+v[0]*k,p[1]+v[1]*k];
+function arrAlong(t1,t2,h){const a=off(sp(t1),NU,h),b=off(sp(t2),NU,h);return arr(a[0],a[1],b[0],b[1])}
+function person(x,y){return `<circle class="ob2" cx="${x}" cy="${y}" r="7"/><line class="ln" x1="${x}" y1="${y+7}" x2="${x}" y2="${y+33}"/>
+  <line class="ln" x1="${x-12}" y1="${y+18}" x2="${x+12}" y2="${y+18}"/><line class="ln" x1="${x}" y1="${y+33}" x2="${x-8}" y2="${y+55}"/>
+  <line class="ln" x1="${x}" y1="${y+33}" x2="${x+8}" y2="${y+55}"/>`}
+function roughTicks(){let s='';for(let t=.04;t<.98;t+=.045){const [x,y]=sp(t);s+=`<line class="hl" x1="${x}" y1="${y}" x2="${x-3}" y2="${y+7}"/>`}return s}
+
+/* ========== 問題 ========== */
+const ASK='この運動で、力学的エネルギーは保存する？';
+const Q=[
+ {text:'摩擦のないなめらかな斜面を、小物体が静かにすべり下りる。', ans:true,
+  svg:svg(slope()+blockOn(.3)+arrAlong(.4,.6,30)+T(176,62,'v','middle','em')+T(78,130,'なめらか')),
+  exp:'物体にはたらくのは重力と垂直抗力。垂直抗力は運動の向きと垂直なので仕事をしない。仕事をするのは保存力である重力だけなので、力学的エネルギーは保存する。'},
+ {text:'あらい斜面を、小物体が動摩擦力を受けながらすべり下りる。', ans:false,
+  svg:svg(slope()+roughTicks()+blockOn(.3)+arrAlong(.4,.6,30)+T(176,62,'v','middle','em')
+     +(()=>{const s=off(off(sp(.3),[-DN[0],-DN[1]],15),NU,3),e=off(s,[-DN[0],-DN[1]],34);return arr(s[0],s[1],e[0],e[1])})()
+     +T(52,48,'f','middle','em')+T(78,130,'あらい面')),
+  exp:'動摩擦力（非保存力）が運動と逆向きにはたらき、負の仕事をする。その分の力学的エネルギーが熱に変わるので、保存しない。'},
+ {text:'糸につるしたおもりを横に引いて静かにはなし、振り子として振らせる（空気抵抗は無視）。', ans:true,
+  svg:svg(ground(100,200,15,true)+`<line class="ds" x1="150" y1="15" x2="150" y2="125"/><path class="ds" d="M87,105 A110,110 0 0 0 213,105"/>
+     <line class="ln" x1="150" y1="15" x2="213" y2="105"/><circle class="ob" cx="213" cy="105" r="10"/>`+T(194,55,'糸','start')+T(150,152,'空気抵抗は無視')),
+  exp:'張力は常におもりの速度と垂直なので仕事をしない。仕事をするのは重力だけなので、力学的エネルギーは保存する。'},
+ {text:'ボールを真上に投げ上げる（空気抵抗は無視）。', ans:true,
+  svg:svg(ground(60,240,145)+`<circle class="gh" cx="150" cy="30" r="10"/><circle class="ob" cx="150" cy="122" r="10"/>`
+     +arr(150,106,150,50)+T(162,82,'v₀','start','em')+T(168,34,'最高点','start')+T(250,100,'空気抵抗は','middle')+T(250,115,'無視')),
+  exp:'ボールにはたらく力は重力（保存力）だけ。運動エネルギーと重力による位置エネルギーの和は一定に保たれる。'},
+ {text:'なめらかな水平面上で、ばねにつながれた物体が左右に振動している。', ans:true,
+  svg:svg(wallV(30,60,140)+ground(30,280,140)+zig(30,118,150,118)+`<rect class="ob" x="150" y="96" width="50" height="44" rx="2"/>`
+     +arr(152,82,198,82,true)+T(245,128,'なめらか')),
+  exp:'仕事をするのは弾性力（保存力）だけ。運動エネルギーと弾性エネルギーの和が一定に保たれるので、力学的エネルギーは保存する。'},
+ {text:'なめらかな斜面に沿って、物体を手で押して一定の速さで押し上げる。', ans:false,
+  svg:svg(slope()+blockOn(.55)+(()=>{const c=off(sp(.55),NU,10),a=off(c,DN,55),b=off(c,DN,17);return arr(a[0],a[1],b[0],b[1])})()
+     +T(240,100,'F（手）','middle','em')+T(150,22,'一定の速さで押し上げる')+T(78,130,'なめらか')),
+  exp:'手が加える力（外力）が正の仕事をする。速さは一定でも高さが増え、位置エネルギーが増加するので、力学的エネルギーは保存しない。'},
+ {text:'なめらかな床の上で、ねんどの球どうしが正面衝突し、くっついて一体となった。', ans:false,
+  svg:svg(ground(30,270,135)+`<circle class="ob" cx="90" cy="115" r="18"/><circle class="ob2" cx="210" cy="115" r="18"/>`
+     +arr(72,82,110,82)+arr(228,82,190,82)+T(150,30,'衝突して一体となる')),
+  exp:'完全非弾性衝突（e = 0）。衝突で物体が変形し、運動エネルギーの一部が熱や音に変わる。運動量は保存するが、力学的エネルギーは保存しない。'},
+ {text:'一定の速さで上昇しているエレベーターの中に立っている人。この人の力学的エネルギーについて考える。', ans:false,
+  svg:svg(`<line class="hl" x1="100" y1="5" x2="100" y2="155"/><line class="hl" x1="200" y1="5" x2="200" y2="155"/>
+     <line class="ln" x1="150" y1="5" x2="150" y2="60"/><rect class="sl" x="108" y="60" width="84" height="84" rx="3"/>`
+     +person(150,78)+arr(228,125,228,60)+T(236,90,'一定の','start')+T(236,105,'速さ','start')),
+  exp:'床からの垂直抗力が人の進む向き（上向き）にはたらき、正の仕事をする。運動エネルギーは一定のまま位置エネルギーが増えるので、保存しない。'},
+ {text:'なめらかなレールの高い位置から小球を静かにはなし、宙返りループを通過させる（空気抵抗は無視）。', ans:true,
+  svg:svg(`<path class="ln" d="M20,25 C30,120 70,140 140,140 L275,140"/><circle class="ln" cx="200" cy="95" r="45"/>
+     <circle class="ob" cx="31" cy="36" r="8"/>`+T(240,30,'なめらかなレール')),
+  exp:'レールからの垂直抗力は常に速度と垂直で仕事をしない。重力だけが仕事をするので、力学的エネルギーは保存する。'},
+ {text:'パラシュートを開いた人が、一定の速さ（終端速度）で落下している。', ans:false,
+  svg:svg(`<path class="ob" d="M95,55 Q150,-5 205,55 Q150,40 95,55 Z"/>
+     <line class="ln" x1="97" y1="55" x2="150" y2="98"/><line class="ln" x1="203" y1="55" x2="150" y2="98"/><line class="ln" x1="150" y1="44" x2="150" y2="98"/>
+     <circle class="ob2" cx="150" cy="104" r="6"/><line class="ln" x1="150" y1="110" x2="150" y2="130"/>
+     <line class="ln" x1="150" y1="130" x2="144" y2="145"/><line class="ln" x1="150" y1="130" x2="156" y2="145"/>`
+     +arr(235,60,235,125)+T(245,90,'一定の','start')+T(245,105,'速さ','start')+T(60,140,'空気抵抗あり')),
+  exp:'速さが一定なので運動エネルギーは変わらないが、高さが下がり位置エネルギーは減っていく。空気抵抗が負の仕事をしているため、保存しない。'},
+ {text:'振り子のおもりが最下点を通過するとき、糸が途中のくぎに引っかかり、小さな円を描いて振れ上がる（空気抵抗は無視）。', ans:true,
+  svg:svg(ground(70,150,15,true)+`<line class="ds" x1="110" y1="15" x2="110" y2="115"/>
+     <path class="ds" d="M45.7,91.6 A100,100 0 0 0 110,115"/><path class="ds" d="M110,115 A40,40 0 0 0 146.4,91.6"/>
+     <line class="ln" x1="110" y1="15" x2="45.7" y2="91.6"/><circle cx="110" cy="75" r="3.5" fill="#ece9e1"/>
+     <circle class="ob" cx="45.7" cy="91.6" r="9"/><circle class="gh" cx="146.4" cy="91.6" r="9"/>`
+     +T(118,70,'くぎ','start')+T(225,45,'くぎに糸が')+T(225,60,'引っかかる')),
+  exp:'くぎに引っかかっても、張力は速度と垂直なので仕事をしない。重力だけが仕事をするので保存する（おもりは元と同じ高さまで上がる）。'},
+ {text:'水平に飛んできた弾丸が、糸でつるされた木片に突き刺さってめり込む（衝突の前後で考える）。', ans:false,
+  svg:svg(ground(150,240,15,true)+`<line class="ln" x1="170" y1="15" x2="170" y2="80"/><line class="ln" x1="220" y1="15" x2="220" y2="80"/>
+     <rect class="ob" x="160" y="80" width="70" height="35" rx="2"/><rect class="ob2" x="60" y="94" width="18" height="7" rx="3"/>`
+     +arr(85,97,145,97)+T(69,85,'弾丸')+T(195,135,'木片')),
+  exp:'弾丸がめり込むとき、摩擦や変形によって運動エネルギーの一部が熱に変わる。運動量は保存するが、力学的エネルギーは保存しない。'},
+ {text:'人工衛星が、地球の重力だけを受けて等速円運動している。', ans:true,
+  svg:svg(`<circle cx="130" cy="75" r="28" fill="#3a78c2" stroke="#ece9e1" stroke-width="1.5"/><circle class="ds" cx="130" cy="75" r="60"/>
+     <rect class="ob" x="184" y="70" width="12" height="10"/><rect x="179" y="62" width="22" height="5" fill="#6fb3ff"/><rect x="179" y="83" width="22" height="5" fill="#6fb3ff"/>`
+     +arr(205,75,205,25)+T(215,45,'v','start','em')+T(130,79,'地球')+T(150,152,'重力のみを受ける')),
+  exp:'はたらくのは万有引力（保存力）だけ。しかも円運動では引力が速度と垂直で仕事をせず、運動エネルギーも位置エネルギーも一定。保存する。'},
+ {text:'水平な道路を走る自動車がブレーキをかけ、タイヤをすべらせながら停止する。', ans:false,
+  svg:svg(ground(20,280,136)+`<line class="skid" x1="50" y1="134" x2="160" y2="134"/><line class="skid" x1="80" y1="134" x2="204" y2="134"/>
+     <rect class="ob2" x="150" y="105" width="80" height="22" rx="5"/><path class="ob2" d="M165,105 L176,88 L210,88 L221,105 Z"/>
+     <circle cx="168" cy="127" r="8" fill="#222" stroke="#ece9e1"/><circle cx="212" cy="127" r="8" fill="#222" stroke="#ece9e1"/>`
+     +arr(240,96,280,96)+T(258,88,'v','middle','em')+T(150,30,'ブレーキで停止')),
+  exp:'動摩擦力が負の仕事をして、運動エネルギーが熱に変わる（ブレーキやタイヤが熱くなる）。保存しない。'},
+ {text:'なめらかな床の上で、2つの球が完全弾性衝突（はねかえり係数 e = 1）をする。', ans:true,
+  svg:svg(ground(30,270,135)+`<circle class="ob" cx="90" cy="115" r="18"/><circle class="ob2" cx="210" cy="115" r="18"/>`
+     +arr(72,82,110,82)+arr(228,82,190,82)+T(150,30,'完全弾性衝突（e = 1）')),
+  exp:'e = 1 の完全弾性衝突では、衝突の前後で運動エネルギーの和が変わらない。高さも変わらないので、力学的エネルギーは保存する。'},
+ {text:'天井からつるしたばねに物体をつけ、上下に単振動させる（空気抵抗は無視）。', ans:true,
+  svg:svg(ground(110,190,15,true)+zig(150,15,150,90,8,8)+`<rect class="ob" x="128" y="90" width="44" height="32" rx="2"/>`
+     +arr(200,75,200,135,true)+T(210,110,'上下に振動','start')+T(70,145,'空気抵抗は無視')),
+  exp:'仕事をするのは重力と弾性力で、どちらも保存力。運動エネルギー＋重力の位置エネルギー＋弾性エネルギーの和が一定に保たれる。'},
+ {text:'ボールを床に落とすと、はねかえり係数 e = 0.6 ではね返り、はね返るたびに高さが低くなる。', ans:false,
+  svg:svg(ground(20,280,140)+`<line class="ds" x1="60" y1="38" x2="60" y2="130"/>
+     <path class="ds" d="M60,130 Q110,40 160,130 Q195,80 230,130 Q250,105 268,130"/><circle class="ob" cx="60" cy="30" r="8"/>`
+     +T(200,30,'e = 0.6')),
+  exp:'e < 1 の衝突では、床と衝突するたびに運動エネルギーの一部が熱や音に変わる。だから元の高さまで戻れない。保存しない。'},
+];
+
+/* ========== 共通 ========== */
+const $=id=>document.getElementById(id);
+const N_STAGES=10, LIMIT=20;
+const label=c=>c?'保存する':'保存しない';
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+function getBest(){try{return +localStorage.getItem('cartBest')||0}catch(e){return 0}}
+function setBest(v){try{if(v>getBest())localStorage.setItem('cartBest',v)}catch(e){}}
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ========== サウンド（WebAudio） ========== */
+let AC=null, muted=false;
+function audioInit(){try{AC=AC||new (window.AudioContext||window.webkitAudioContext)();AC.resume()}catch(e){}}
+function tone(f,dur,type='square',vol=.04,slide=0,delay=0){
+  if(!AC||muted)return;
+  const t=AC.currentTime+delay,o=AC.createOscillator(),g=AC.createGain();
+  o.type=type;o.frequency.setValueAtTime(f,t);if(slide)o.frequency.exponentialRampToValueAtTime(slide,t+dur);
+  g.gain.setValueAtTime(vol,t);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(AC.destination);o.start(t);o.stop(t+dur+.02);
+}
+const sfx={
+  clack(){tone(110,.05,'square',.035);tone(80,.05,'square',.03,0,.07)},
+  tick(){tone(1200,.05,'sine',.05)},
+  ok(){tone(660,.12,'triangle',.08);tone(880,.12,'triangle',.08,0,.12);tone(1320,.3,'triangle',.08,0,.24)},
+  fall(){tone(600,1.3,'sawtooth',.05,50)},
+  crash(){tone(70,.4,'square',.08,30)},
+};
+
+/* ========== 一人称トロッコビュー（疑似3D） ========== */
+const cv=$('view'), ctx=cv.getContext('2d');
+const W=480,H=270,F=260,HY0=112,DRAW=140;
+const ZF=70, ZR1=ZF+22, ZR2=ZF+30, ZW=ZF+52, BS=7, BL=16;   // 分岐・谷・トンネルの位置
+const V0=(ZF-7)/LIMIT, VMAX=30, ACC=22;
+let DPR=1;
+function resize(){DPR=Math.min(window.devicePixelRatio||1,2);cv.width=W*DPR;cv.height=H*DPR}
+resize();addEventListener('resize',resize);
+
+const cam={z:0,x:0,yaw:0,h:1.5,hy:HY0,sx:0};
+let state='title', route=0 /* -1左 0直進 1右 */, broken={'-1':false,'1':false};
+let speed=3, fallK=0, fallDir=1, dark=0, target=0, qStart=0, lastClack=0, lastTick=99, trees=[], signText={'-1':'','1':''};
+
+function bx(side,z){const d=z-ZF;if(d<=0)return 0;const u=Math.min(d/BL,1);return side*BS*u*u*(3-2*u)}
+const routeX=z=>route?bx(route,z):0;
+function proj(x,z,up=0){
+  const dz=z-cam.z;if(dz<.25)return null;const s=F/dz;
+  return [W/2+(x-cam.x-cam.yaw*dz)*s+cam.sx, cam.hy+(cam.h-up)*s, s];
+}
+const projY=z=>{const dz=z-cam.z;return dz<.25?H+400:cam.hy+cam.h*F/dz};
+
+function makeTrees(){
+  trees=[];
+  for(let z=-6;z<ZW-2;z+=1.6+Math.random()*2.2){
+    if(z>ZR1-2.5&&z<ZR2+2.5)continue;
+    const side=Math.random()<.5?-1:1;
+    const x=z<ZF-3?side*(3.4+Math.random()*16):side*(BS+3.6+Math.random()*14);
+    trees.push({x,z,h:2.4+Math.random()*2.6,c:['#2f5a2c','#356b33','#285024','#3d7a3a'][Math.floor(Math.random()*4)]});
+  }
+}
+
+function poly(pts,fill){ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));ctx.closePath();ctx.fillStyle=fill;ctx.fill()}
+function zSamples(a,b){
+  const out=[];let z=Math.max(a,cam.z+.3);const lim=Math.min(b,cam.z+DRAW);if(z>=lim)return out;
+  while(z<lim){out.push(z);z+=Math.max(.35,(z-cam.z)*.07)}out.push(lim);return out;
+}
+function strip(fx,a,b,half,color,up=0){
+  const zs=zSamples(a,b);if(zs.length<2)return;const L=[],R=[];
+  for(const z of zs){L.push(proj(fx(z)-half,z,up));R.push(proj(fx(z)+half,z,up))}
+  poly(L.concat(R.reverse()),color);
+}
+function sleepers(fx,a,b){
+  const SP=1.1;let z=Math.ceil(Math.max(a,cam.z+.4)/SP)*SP;const lim=Math.min(b,cam.z+70);
+  ctx.fillStyle='#5e3d22';
+  for(;z<lim;z+=SP){
+    const x=fx(z),p1=proj(x-1.05,z,.04),p2=proj(x+1.05,z,.04),p3=proj(x+1.05,z+.32,.04),p4=proj(x-1.05,z+.32,.04);
+    if(!p1||!p4)continue;
+    ctx.beginPath();ctx.moveTo(p1[0],p1[1]);ctx.lineTo(p2[0],p2[1]);ctx.lineTo(p3[0],p3[1]);ctx.lineTo(p4[0],p4[1]);ctx.fill();
+  }
+}
+function rails(fx,a,b){
+  for(const o of[-.75,.75]){
+    strip(z=>fx(z)+o,a,b,.09,'#3a3d42',.02);
+    strip(z=>fx(z)+o,a,b,.055,'#d4d9e0',.13);
+  }
+}
+function track(fx,a,b){
+  // 谷の上は橋板、それ以外は砂利
+  const segs=[[a,Math.min(b,ZR1)],[Math.max(a,ZR2),b]];
+  for(const[s,e]of segs)if(e>s)strip(fx,s,e,1.4,'#8a8174');
+  const ba=Math.max(a,ZR1-.3),bb=Math.min(b,ZR2+.3);
+  if(bb>ba){strip(fx,ba,bb,1.3,'#3b2412',-.25);strip(fx,ba,bb,1.25,'#7a4f2a',.03)}
+  sleepers(fx,a,b);rails(fx,a,b);
+}
+
+function mountains(){
+  const layers=[{c:'#8fa9c4',amp:60,par:260,k:.011},{c:'#6b8f7a',amp:34,par:520,k:.019}];
+  for(const L of layers){
+    const off=-cam.yaw*L.par-cam.x*L.par*.03;
+    ctx.beginPath();ctx.moveTo(-120,cam.hy);
+    for(let x=-120;x<=W+120;x+=8){
+      const w=x-off,h=L.amp*(.55+.25*Math.sin(w*L.k)+.14*Math.sin(w*L.k*2.7+1)+.07*Math.sin(w*L.k*6.1+2));
+      ctx.lineTo(x,cam.hy-h);
+    }
+    ctx.lineTo(W+120,cam.hy);ctx.closePath();ctx.fillStyle=L.c;ctx.fill();
+  }
+}
+function clouds(now){
+  ctx.fillStyle='rgba(255,255,255,.85)';
+  for(let i=0;i<5;i++){
+    const x=((i*137+now*.004-cam.yaw*300)%(W+240)+W+240)%(W+240)-120,y=cam.hy-90-((i*53)%40);
+    ctx.beginPath();ctx.ellipse(x,y,34,10,0,0,7);ctx.ellipse(x+22,y-6,22,9,0,0,7);ctx.fill();
+  }
+}
+function groundBands(){
+  ctx.fillStyle='rgba(0,0,0,.07)';
+  let z=Math.floor(cam.z/3)*3;
+  for(;z<cam.z+DRAW;z+=3){
+    if(z+1.5>ZR1&&z<ZR2)continue;
+    const y1=projY(z+1.5),y2=projY(Math.max(z,cam.z+.26));if(y2<y1)continue;
+    ctx.fillRect(-200,y1,W+400,Math.min(y2,H+400)-y1);
+  }
+}
+function ravine(){
+  if(cam.z>=ZR2)return;
+  const yFar=projY(ZR2),yNear=cam.z<ZR1?projY(ZR1):H+400;
+  ctx.fillStyle='#070504';ctx.fillRect(-200,yFar,W+400,yNear-yFar);
+  // 向こう側のがけ面
+  const dz=ZR2-cam.z,yFace=cam.hy+(cam.h+1.6)*F/dz;
+  const g=ctx.createLinearGradient(0,yFar,0,yFace);g.addColorStop(0,'#5e4430');g.addColorStop(1,'#070504');
+  ctx.fillStyle=g;ctx.fillRect(-200,yFar,W+400,Math.min(yFace,yNear)-yFar);
+  ctx.fillStyle='#3e6b33';ctx.fillRect(-200,yFar-1.5,W+400,2);
+  if(cam.z<ZR1){ctx.fillStyle='#5a3f2b';ctx.fillRect(-200,yNear-2,W+400,3)}
+}
+function drawTree(t){
+  const p=proj(t.x,t.z,0);if(!p||p[0]<-300||p[0]>W+300)return;const s=p[2];
+  ctx.fillStyle='#4a3020';ctx.fillRect(p[0]-.13*s,p[1]-.9*s,.26*s,.9*s);
+  ctx.fillStyle=t.c;
+  for(let i=0;i<3;i++){
+    const b=p[1]-(.6+i*t.h*.26)*s,w=(1.1-i*.28)*s,tp=b-t.h*.42*s;
+    ctx.beginPath();ctx.moveTo(p[0]-w,b);ctx.lineTo(p[0]+w,b);ctx.lineTo(p[0],tp);ctx.fill();
+  }
+}
+function drawSign(side){
+  const z=ZF-4,x=side*2.7,p=proj(x,z,0);if(!p)return;const s=p[2];
+  const top=proj(x,z,2.6);
+  ctx.fillStyle='#3d2510';ctx.fillRect(p[0]-.07*s,top[1],.14*s,p[1]-top[1]);
+  const y1=proj(x,z,2.6)[1],y2=proj(x,z,1.7)[1],cx=p[0],w=1.6*s,tip=side*(w+.45*s);
+  ctx.beginPath();ctx.moveTo(cx-side*w,y1);ctx.lineTo(cx+side*w,y1);ctx.lineTo(cx+tip,(y1+y2)/2);ctx.lineTo(cx+side*w,y2);ctx.lineTo(cx-side*w,y2);ctx.closePath();
+  ctx.fillStyle='#7a4b22';ctx.fill();ctx.lineWidth=Math.max(1,.06*s);ctx.strokeStyle='#fff3dc';ctx.stroke();
+  const fs=.5*s;if(fs<3)return;
+  ctx.fillStyle='#fff3dc';ctx.font=`900 ${fs}px sans-serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(signText[side],cx+side*.15*s,(y1+y2)/2);
+}
+function drawWall(){
+  const p=proj(0,ZW,0);if(!p)return;const s=p[2];
+  const g=ctx.createLinearGradient(0,proj(0,ZW,9)[1],0,p[1]);g.addColorStop(0,'#8a7d6b');g.addColorStop(1,'#544a3e');
+  ctx.beginPath();ctx.moveTo(proj(-220,ZW,0)[0],p[1]);
+  for(let x=-220;x<=220;x+=4){const h=6+2.5*Math.sin(x*.21)+1.5*Math.sin(x*.53+1)+(Math.abs(x)<14?2:0);const q=proj(x,ZW,h);ctx.lineTo(q[0],q[1])}
+  ctx.lineTo(proj(220,ZW,0)[0],p[1]);ctx.closePath();ctx.fillStyle=g;ctx.fill();
+  for(const side of[-1,1]){
+    const c=proj(side*BS,ZW,0),r=1.75*s,cy=c[1]-1.9*s;
+    ctx.fillStyle='#9a8e7c';ctx.beginPath();ctx.arc(c[0],cy,r*1.22,Math.PI,0);ctx.lineTo(c[0]+r*1.22,c[1]);ctx.lineTo(c[0]-r*1.22,c[1]);ctx.fill();
+    ctx.fillStyle='#050505';ctx.beginPath();ctx.arc(c[0],cy,r,Math.PI,0);ctx.lineTo(c[0]+r,c[1]);ctx.lineTo(c[0]-r,c[1]);ctx.fill();
+  }
+}
+function cartFront(){
+  const b=Math.sin(cam.z*6)*speed*.06;
+  ctx.save();ctx.translate(0,b);
+  const g=ctx.createLinearGradient(0,H-48,0,H);g.addColorStop(0,'#9aa0a8');g.addColorStop(.2,'#6b7078');g.addColorStop(1,'#33363b');
+  ctx.beginPath();ctx.moveTo(-10,H+10);ctx.lineTo(-10,H-30);ctx.quadraticCurveTo(70,H-50,W/2,H-50);ctx.quadraticCurveTo(W-70,H-50,W+10,H-30);ctx.lineTo(W+10,H+10);ctx.closePath();
+  ctx.fillStyle=g;ctx.fill();ctx.strokeStyle='#c8cdd4';ctx.lineWidth=2;ctx.stroke();
+  ctx.fillStyle='#2a2c30';for(let i=0;i<9;i++){const x=40+i*50;ctx.beginPath();ctx.arc(x,H-30+Math.abs(x-W/2)*.04,3,0,7);ctx.fill()}
+  // 手すりをにぎる手
+  ctx.fillStyle='#f0c9a0';ctx.strokeStyle='#8a6a4a';ctx.lineWidth=1.5;
+  for(const x of[78,W-78]){ctx.beginPath();ctx.ellipse(x,H-47,17,10,0,0,7);ctx.fill();ctx.stroke()}
+  ctx.restore();
+}
+function speedLines(){
+  if(speed<9)return;const a=clamp((speed-9)/12,0,1)*.5;
+  ctx.strokeStyle=`rgba(255,255,255,${a})`;ctx.lineWidth=1.5;
+  for(let i=0;i<14;i++){
+    const ang=Math.random()*Math.PI*2,r1=150+Math.random()*80,r2=r1+40+Math.random()*80;
+    const cx=W/2,cy=cam.hy;ctx.beginPath();ctx.moveTo(cx+Math.cos(ang)*r1,cy+Math.sin(ang)*r1*.7);ctx.lineTo(cx+Math.cos(ang)*r2,cy+Math.sin(ang)*r2*.7);ctx.stroke();
+  }
+}
+
+function render(now){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle='#000';ctx.fillRect(0,0,W,H);
+  ctx.save();
+  if(fallK>0){ctx.translate(W/2,H/2);ctx.rotate(fallDir*fallK*.55);ctx.translate(-W/2,-H/2)}
+  let g=ctx.createLinearGradient(0,cam.hy-160,0,cam.hy);g.addColorStop(0,'#3a74c4');g.addColorStop(1,'#cfe8f7');
+  ctx.fillStyle=g;ctx.fillRect(-200,-400,W+400,cam.hy+400);
+  clouds(now);mountains();
+  g=ctx.createLinearGradient(0,cam.hy,0,H);g.addColorStop(0,'#6f9a55');g.addColorStop(1,'#3f6b33');
+  ctx.fillStyle=g;ctx.fillRect(-200,cam.hy,W+400,H+400);
+  groundBands();ravine();
+  // 線路（遠い順）
+  for(const side of[-1,1]){
+    const fx=z=>bx(side,z);
+    if(broken[side]){track(fx,ZF,ZR1+1.2);track(fx,ZR2-1.2,ZW)}else track(fx,ZF,ZW);
+  }
+  track(()=>0,-10,ZF);
+  // 物体（遠い順）
+  const objs=trees.map(t=>({z:t.z,d:()=>drawTree(t)}));
+  objs.push({z:ZW,d:drawWall},{z:ZF-4,d:()=>{drawSign(-1);drawSign(1)}});
+  objs.filter(o=>o.z>cam.z+.4&&o.z<cam.z+DRAW).sort((a,b)=>b.z-a.z).forEach(o=>o.d());
+  ctx.restore();
+  speedLines();
+  if(state!=='fall'||fallK<.5)cartFront();
+  // ビネット
+  g=ctx.createRadialGradient(W/2,H/2,H*.45,W/2,H/2,H*.95);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(1,'rgba(0,0,0,.55)');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  if(dark>0){ctx.fillStyle=`rgba(0,0,0,${dark})`;ctx.fillRect(0,0,W,H)}
+  // HUD
+  if(state==='question'){
+    const m=Math.max(0,Math.round((ZF-cam.z)*1.5));
+    ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(10,10,128,26);
+    ctx.fillStyle='#fff';ctx.font='800 15px sans-serif';ctx.textAlign='left';ctx.textBaseline='middle';
+    ctx.fillText(`分岐まで ${m} m`,18,23);
+  }
+}
+
+/* ========== 状態の更新 ========== */
+let last=performance.now();
+function update(dt,now){
+  if(state==='title'){speed=4;cam.z+=speed*dt;if(cam.z>ZF-12)cam.z=0;dark=Math.max(0,dark-dt*2)}
+  else if(state==='question'){
+    const el=(now-qStart)/1000,left=Math.max(0,LIMIT-el);
+    speed=V0;cam.z=V0*Math.min(el,LIMIT);dark=Math.max(0,dark-dt*2.5);
+    timerUI(left);
+    if(left<=5&&Math.ceil(left)!==lastTick){lastTick=Math.ceil(left);sfx.tick()}
+    if(left<=0)timeUp();
+  }
+  else if(state==='rush'){
+    speed=Math.min(VMAX,speed+ACC*dt);cam.z+=speed*dt;
+    if(cam.z>ZW-3)dark=clamp((cam.z-(ZW-3))/3,0,1);
+    if(cam.z>=target)arrive();
+  }
+  else if(state==='fall'){
+    fallK=Math.min(1,fallK+dt/1.4);cam.z+=speed*dt*(1-fallK)*.25;
+    dark=clamp((fallK-.35)/.65,0,1);
+    if(fallK>=1){state='done';setTimeout(()=>result(pending),250)}
+  }
+  cam.x=routeX(cam.z);cam.yaw=(routeX(cam.z+6)-cam.x)/6;
+  const derail=route===0&&cam.z>ZF&&state!=='title';
+  const sh=(derail?3.5:0)+speed*.04;
+  cam.sx=(Math.random()-.5)*sh;
+  cam.hy=HY0+Math.sin(cam.z*5.3)*speed*.05+(Math.random()-.5)*sh-(state==='fall'?230*fallK*fallK*(3-2*fallK):0);
+  if(state!=='title'&&state!=='done'&&Math.floor(cam.z/4)!==lastClack){lastClack=Math.floor(cam.z/4);sfx.clack()}
+}
+function loop(now){const dt=Math.min(.05,(now-last)/1000);last=now;update(dt,now);render(now);requestAnimationFrame(loop)}
+makeTrees();requestAnimationFrame(loop);
+
+/* ========== ゲーム進行 ========== */
+let order=[], idx=0, played=[], conserveLeft=true, pending='ok';
+
+function showCard(html,wide){const c=$('card');c.className='card'+(wide?' wide':'');c.innerHTML=html;c.scrollTop=0;$('overlay').hidden=false;const b=c.querySelector('.btn');if(b)b.focus({preventScroll:true})}
+function hideCard(){$('overlay').hidden=true}
+function setButtons(on){$('btnL').disabled=$('btnR').disabled=!on}
+function banner(s,cls){const b=$('banner');b.textContent=s;b.className=s?'show '+(cls||''):''}
+function timerUI(left){
+  $('sec').textContent=left.toFixed(1);$('sec').classList.toggle('low',left<=5);
+  const bar=$('bar');bar.style.width=(left/LIMIT*100)+'%';
+  bar.style.background=left<=5?'var(--bad)':left<=10?'var(--warn)':'var(--good)';
+}
+
+function titleScreen(){
+  state='title';route=0;broken={'-1':false,'1':false};fallK=0;signText={'-1':'？','1':'？'};
+  const best=getBest();
+  showCard(`<h1>🚃 エネルギー保存トロッコ</h1>
+    <p>きみはトロッコに乗って線路を突き進んでいる。前方で道が2つに分かれている！問題の運動で<b>力学的エネルギーが保存するかどうか</b>を見きわめ、正しい道を選ぼう。</p>
+    <ul><li>正しい道 → 橋をわたってトンネルへ。次のステージへ</li><li>まちがった道 → 橋がくずれて<span class="bad">谷へ落下</span></li>
+    <li>制限時間は<b>20秒</b>。分岐に着くまでに選ばないと脱線して落下！</li><li>全${N_STAGES}ステージを突破せよ。最後に振り返り解説あり</li></ul>
+    ${best?`<p class="muted">これまでの最高記録：${best} ステージ</p>`:''}
+    <button class="btn" onclick="startGame()">出発する</button>`);
+}
+function startGame(){audioInit();order=shuffle([...Q]).slice(0,N_STAGES);idx=0;played=[];hideCard();dark=1;loadStage()}
+
+function loadStage(){
+  const q=order[idx];
+  $('stage').textContent=`STAGE ${idx+1}/${N_STAGES}`;
+  $('diagram').innerHTML=q.svg;
+  $('qtext').innerHTML=`${q.text}<span class="ask">${ASK}</span>`;
+  conserveLeft=Math.random()<.5;
+  signText={'-1':label(conserveLeft),'1':label(!conserveLeft)};
+  $('btnL').querySelector('span').textContent=label(conserveLeft);
+  $('btnR').querySelector('span').textContent=label(!conserveLeft);
+  route=0;broken={'-1':false,'1':false};fallK=0;cam.z=0;speed=V0;lastTick=99;
+  makeTrees();banner('');setButtons(true);timerUI(LIMIT);
+  qStart=performance.now();state='question';
+}
+
+function choose(side){
+  if(state!=='question')return;
+  const q=order[idx];
+  const picked=(side==='L')===conserveLeft, correct=picked===q.ans;
+  played.push({q,picked,correct});
+  const s=side==='L'?-1:1, wrong=(q.ans===conserveLeft)?1:-1;
+  broken[wrong]=true;route=s;setButtons(false);
+  pending=correct?'ok':'wrong';
+  target=correct?ZW+.6:ZR1+1.2;
+  state='rush';
+}
+function timeUp(){
+  if(state!=='question')return;
+  const q=order[idx];played.push({q,picked:null,correct:false});
+  broken[(q.ans===conserveLeft)?1:-1]=true;route=0;setButtons(false);
+  banner('時間切れ！ブレーキがきかない！','bad');
+  pending='timeout';target=ZR1;state='rush';
+}
+function arrive(){
+  if(pending==='ok'){state='done';dark=1;banner('正解！','good');sfx.ok();setTimeout(()=>result('ok'),500)}
+  else{state='fall';fallDir=Math.random()<.5?-1:1;banner('落下…！','bad');sfx.crash();sfx.fall()}
+}
+
+function result(kind){
+  const q=order[idx];
+  const ansLine=`<p class="ans">正解：力学的エネルギーは「${label(q.ans)}」</p><p class="exp">${q.exp}</p>`;
+  if(kind==='ok'){
+    const lastStage=idx===N_STAGES-1;
+    showCard(`<h2 class="good">⭕ 正解！ STAGE ${idx+1} クリア</h2>${ansLine}
+      <button class="btn" onclick="${lastStage?'clearGame()':'nextStage()'}">${lastStage?'ゴールへ！':'次のステージへ'}</button>`);
+  }else{
+    setBest(idx);
+    showCard(`<h2 class="bad">💥 ${kind==='timeout'?'時間切れで脱線、谷へ落下…':'橋がくずれて谷へ落下…'}</h2>
+      <p class="bad" style="font-weight:800">GAME OVER</p>${ansLine}
+      <p>クリアしたステージ：<b>${idx} / ${N_STAGES}</b>　<span class="muted">（最高記録 ${getBest()}）</span></p>
+      <button class="btn" onclick="reviewScreen()">📖 振り返り解説を見る</button>
+      <button class="btn sub" onclick="startGame()">もう一度出発する</button>`);
+  }
+}
+function nextStage(){idx++;hideCard();dark=1;loadStage()}
+function clearGame(){
+  setBest(N_STAGES);
+  showCard(`<h1 class="good">🏁 全ステージ制覇！</h1>
+    <p>${N_STAGES}問すべての分かれ道を正しく選び、トロッコは無事ゴールに到着した！</p>
+    <button class="btn" onclick="reviewScreen()">📖 振り返り解説を見る</button>
+    <button class="btn sub" onclick="startGame()">もう一度あそぶ（問題はシャッフル）</button>`);
+}
+function reviewScreen(){
+  const okN=played.filter(h=>h.correct).length;
+  let html=`<h2>📖 振り返り解説</h2>
+    <p>今回出題された <b>${played.length}問</b> のうち <b class="good">${okN}問正解</b>${played.length<N_STAGES?`（STAGE ${played.length} で落下）`:'（全ステージ制覇！）'}</p>`;
+  played.forEach((h,i)=>{
+    const mark=h.correct?'<span class="good">⭕ 正解</span>':`<span class="bad">❌ ${h.picked===null?'時間切れ':'不正解'}</span>`;
+    html+=`<div class="rv ${h.correct?'ok':'ng'}">
+      <div class="rvh"><b>STAGE ${i+1}</b>${mark}</div>
+      <div class="rvb"><div class="rvd">${h.q.svg}</div>
+        <div><p>${h.q.text}</p>
+        <p class="small">あなたの答え：${h.picked===null?'（時間切れ・未回答）':label(h.picked)}<br>正解：<b>${label(h.q.ans)}</b></p></div></div>
+      <p class="exp">${h.q.exp}</p></div>`;
+  });
+  html+=`<div class="point"><b>🔑 判断のポイント</b>
+    <ul><li><b>保存力（重力・弾性力・万有引力）だけ</b>が仕事をする → 力学的エネルギーは<b class="good">保存する</b></li>
+    <li>垂直抗力・糸の張力のように<b>速度と垂直で仕事をしない力</b>は、はたらいていても保存をこわさない</li>
+    <li>摩擦・空気抵抗・手で押す力・床の垂直抗力が動く向きにはたらく場合・非弾性衝突（e &lt; 1）など、<b>保存力以外の力が仕事をする</b> → <b class="bad">保存しない</b></li></ul></div>
+    <button class="btn" onclick="startGame()">もう一度出発する</button>
+    <button class="btn sub" onclick="titleScreen()">タイトルへ</button>`;
+  showCard(html,true);
+}
+
+$('btnL').onclick=()=>choose('L');$('btnR').onclick=()=>choose('R');
+cv.addEventListener('click',e=>{const r=cv.getBoundingClientRect();choose(e.clientX-r.left<r.width/2?'L':'R')});
+$('mute').onclick=()=>{muted=!muted;$('mute').textContent=muted?'🔇':'🔊'};
+document.addEventListener('keydown',e=>{
+  if(!$('overlay').hidden)return;
+  if(e.key==='ArrowLeft')choose('L');else if(e.key==='ArrowRight')choose('R');
+});
+titleScreen();
+</script>
+</body>
+</html>
